@@ -1,0 +1,73 @@
+[worldserver]
+
+#
+# WorldBuffBots.Enable
+#   Enable the module.
+#   Default: 1
+#
+WorldBuffBots.Enable = 1
+
+#
+# WorldBuffBots.Debug
+#   Print extra module log lines.
+#   Default: 0
+#
+WorldBuffBots.Debug = 0
+
+#
+# WorldBuffBots.BaseMinutes / WorldBuffBots.VarianceMinutes
+#   Each buff rerolls its next fire time as BaseMinutes +/- VarianceMinutes.
+#   Default: 90 +/- 60 minutes, meaning 30 to 150 minutes.
+#
+WorldBuffBots.BaseMinutes = 90
+WorldBuffBots.VarianceMinutes = 60
+
+#
+# WorldBuffBots.InitialMinMinutes / WorldBuffBots.InitialMaxMinutes
+#   Startup timers are not persistent. Each buff starts with a random delay in
+#   this range after worldserver starts or after a config reload.
+#   Default: 30 to 150 minutes.
+#
+WorldBuffBots.InitialMinMinutes = 30
+WorldBuffBots.InitialMaxMinutes = 150
+
+#
+# WorldBuffBots.BotFallbackLevel
+#   If no bot is in the event area, pick any online bot at this level.
+#   Default: 60
+#
+WorldBuffBots.BotFallbackLevel = 60
+
+#
+# WorldBuffBots.FallbackAnnouncerName
+#   Used only if no online bot can be found at all.
+#   Default: A wandering hero
+#
+WorldBuffBots.FallbackAnnouncerName = A wandering hero
+
+#
+# Warchief's Blessing
+#   Chooses the announcement name from bots in Orgrimmar.
+#   Applies spell 16609 to eligible players in Orgrimmar.
+#   IncludeCrossroads also applies the buff to eligible players in the Crossroads
+#   10 seconds later, matching AzerothCore's existing Thrall reward script.
+#
+WorldBuffBots.Warchief.Enable = 1
+WorldBuffBots.Warchief.IncludeCrossroads = 1
+WorldBuffBots.Warchief.Announcement = Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of {player}.
+
+#
+# Rallying Cry of the Dragonslayer
+#   Chooses the announcement name from bots in Stormwind.
+#   Applies spell 22888 to eligible players in Stormwind.
+#
+WorldBuffBots.Dragonslayer.Enable = 1
+WorldBuffBots.Dragonslayer.Announcement = {player} has returned the head of Onyxia! Rallying Cry of the Dragonslayer echoes through Stormwind.
+
+#
+# Spirit of Zandalar
+#   Chooses the announcement name from bots in Stranglethorn Vale.
+#   Applies spell 24425 to eligible players in Stranglethorn Vale.
+#
+WorldBuffBots.Zandalar.Enable = 1
+WorldBuffBots.Zandalar.Announcement = {player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.
