@@ -1,4 +1,6 @@
+# World Buff Simulator
 # mod-world-buff-bots
+# Created by Rockhopper1776
 
 Drop-in AzerothCore module for a `mod-playerbots` branch. It simulates classic world buff turn-ins on independent randomized timers:
 
@@ -45,3 +47,5 @@ WorldBuffBots.Debug = 1
 ## Notes
 
 This module intentionally simulates the reward result directly instead of forcing quest completion. It does not alter quest status, inventory, or NPC state.
+
+# GNU Affero General Public License v3.0
