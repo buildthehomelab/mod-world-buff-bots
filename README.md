@@ -31,8 +31,7 @@ Warchief's Blessing also applies to the Crossroads 10 seconds later by default, 
 
 1. Copy `mod-world-buff-bots` into your AzerothCore `modules/` directory.
 2. Re-run CMake and rebuild worldserver.
-3. Copy `conf/mod_world_buff_bots.conf.dist` to your worldserver config `modules` folder as `mod_world_buff_bots.conf`.
-4. Edit the config if you want different timers, announcements, or enabled buffs.
+3. Edit the mod_world_buff_bots.conf in your env/dist/etc/modules folder if you want different timers, announcements, or enabled buffs.
 
 For quick testing, set:
 
