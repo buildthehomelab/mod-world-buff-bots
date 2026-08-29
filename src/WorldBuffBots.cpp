@@ -1,6 +1,6 @@
 /*
- * Simulates classic world buff turn-ins by choosing an online playerbot name,
- * announcing the event, and applying the actual world buff spells.
+ * Simulates classic world buff turn-ins by choosing a faction-appropriate
+ * character name, announcing the event, and applying the actual world buffs.
  */
 
 #include "AreaDefines.h"
@@ -10,12 +10,10 @@
 #include "Random.h"
 #include "ScriptMgr.h"
 #include "World.h"
-#include "WorldSession.h"
 #include "WorldSessionMgr.h"
 
 #include <algorithm>
 #include <array>
-#include <iterator>
 #include <string>
 #include <vector>
 
@@ -26,11 +24,26 @@ constexpr uint32 SPELL_RALLYING_CRY_OF_THE_DRAGONSLAYER = 22888;
 constexpr uint32 SPELL_SPIRIT_OF_ZANDALAR = 24425;
 constexpr uint32 MS_PER_MINUTE = 60 * IN_MILLISECONDS;
 
-struct BotCandidate
+enum class AnnouncerNamePool
 {
-    std::string Name;
-    uint32 Level;
+    Alliance,
+    Horde,
+    Either
 };
+
+constexpr std::array<char const*, 24> ALLIANCE_ANNOUNCER_NAMES = {{
+    "Aldren", "Aricel", "Baelric", "Brennar", "Caldrin", "Corwyn",
+    "Darien", "Edrin", "Elowen", "Fenric", "Garran", "Halwen",
+    "Isendra", "Jorren", "Kaelyn", "Liora", "Merric", "Norwyn",
+    "Odelia", "Perrin", "Roswyn", "Selric", "Tarian", "Vaelora"
+}};
+
+constexpr std::array<char const*, 24> HORDE_ANNOUNCER_NAMES = {{
+    "Azgora", "Brakka", "Dorgash", "Gorvak", "Gralnok", "Hargun",
+    "Krazka", "Lokgar", "Malkor", "Mogra", "Narvok", "Rethka",
+    "Rogash", "Shagra", "Surnak", "Thokran", "Torgha", "Urgash",
+    "Varkesh", "Varzok", "Zagrim", "Zoraka", "Drezka", "Kazra"
+}};
 
 struct DelayedCast
 {
@@ -44,7 +57,7 @@ struct WorldBuffEvent
     char const* Key;
     char const* Label;
     uint32 SpellId;
-    uint32 AnnouncerAreaId;
+    AnnouncerNamePool NamePool;
     bool Enabled;
     uint32 TimerMs;
     std::string DefaultAnnouncement;
@@ -60,11 +73,6 @@ bool IsInAreaOrZone(Player const* player, uint32 areaId)
 bool IsEligibleTarget(Player const* player)
 {
     return player && player->IsInWorld() && player->IsAlive() && !player->IsGameMaster();
-}
-
-bool IsPlayerBot(Player const* player)
-{
-    return player && player->GetSession() && player->GetSession()->IsBot();
 }
 
 uint32 MinutesToMs(uint32 minutes)
@@ -96,7 +104,7 @@ public:
                 "Warchief",
                 "Warchief's Blessing",
                 SPELL_WARCHIEFS_BLESSING,
-                AREA_ORGRIMMAR,
+                AnnouncerNamePool::Horde,
                 true,
                 0,
                 "Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of {player}.",
@@ -107,7 +115,7 @@ public:
                 "Dragonslayer",
                 "Rallying Cry of the Dragonslayer",
                 SPELL_RALLYING_CRY_OF_THE_DRAGONSLAYER,
-                AREA_STORMWIND_CITY,
+                AnnouncerNamePool::Alliance,
                 true,
                 0,
                 "{player} has returned the head of Onyxia! Rallying Cry of the Dragonslayer echoes through Stormwind.",
@@ -118,7 +126,7 @@ public:
                 "Zandalar",
                 "Spirit of Zandalar",
                 SPELL_SPIRIT_OF_ZANDALAR,
-                AREA_STRANGLETHORN_VALE,
+                AnnouncerNamePool::Either,
                 true,
                 0,
                 "{player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.",
@@ -178,8 +186,6 @@ private:
         _varianceMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.VarianceMinutes", 60);
         _initialMinMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.InitialMinMinutes", 30);
         _initialMaxMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.InitialMaxMinutes", 150);
-        _botFallbackLevel = sConfigMgr->GetOption<uint32>("WorldBuffBots.BotFallbackLevel", 60);
-        _fallbackAnnouncerName = sConfigMgr->GetOption<std::string>("WorldBuffBots.FallbackAnnouncerName", "A wandering hero");
         _warchiefCrossroads = sConfigMgr->GetOption<bool>("WorldBuffBots.Warchief.IncludeCrossroads", true);
 
         for (WorldBuffEvent& event : _events)
@@ -221,7 +227,7 @@ private:
 
     void FireEvent(WorldBuffEvent const& event)
     {
-        std::string announcerName = SelectAnnouncerName(event.AnnouncerAreaId);
+        std::string announcerName = SelectAnnouncerName(event.NamePool);
         std::string announcement = FormatAnnouncement(event, announcerName);
 
         sWorldSessionMgr->SendServerMessage(SERVER_MSG_STRING, announcement);
@@ -274,66 +280,28 @@ private:
         return appliedCount;
     }
 
-    std::string SelectAnnouncerName(uint32 sourceAreaId) const
+    std::string SelectAnnouncerName(AnnouncerNamePool namePool) const
     {
-        std::vector<BotCandidate> areaBots;
-        std::vector<BotCandidate> levelFallbackBots;
-        std::vector<BotCandidate> allBots;
-
-        sWorldSessionMgr->DoForAllOnlinePlayers([&](Player* player)
+        switch (namePool)
         {
-            if (!IsPlayerBot(player))
-                return;
+            case AnnouncerNamePool::Alliance:
+                return PickRandomName(ALLIANCE_ANNOUNCER_NAMES);
+            case AnnouncerNamePool::Horde:
+                return PickRandomName(HORDE_ANNOUNCER_NAMES);
+            case AnnouncerNamePool::Either:
+                return urand(0, 1) == 0
+                    ? PickRandomName(ALLIANCE_ANNOUNCER_NAMES)
+                    : PickRandomName(HORDE_ANNOUNCER_NAMES);
+        }
 
-            BotCandidate candidate = { player->GetName(), player->GetLevel() };
-            allBots.push_back(candidate);
-
-            if (IsInAreaOrZone(player, sourceAreaId))
-                areaBots.push_back(candidate);
-
-            if (candidate.Level == _botFallbackLevel)
-                levelFallbackBots.push_back(candidate);
-        });
-
-        if (!areaBots.empty())
-            return PickHighestOrRandom(areaBots).Name;
-
-        if (!levelFallbackBots.empty())
-            return PickRandom(levelFallbackBots).Name;
-
-        if (!allBots.empty())
-            return PickHighestOrRandom(allBots).Name;
-
-        return _fallbackAnnouncerName;
+        return PickRandomName(ALLIANCE_ANNOUNCER_NAMES);
     }
 
-    BotCandidate PickHighestOrRandom(std::vector<BotCandidate> const& candidates) const
+    template <std::size_t N>
+    std::string PickRandomName(std::array<char const*, N> const& names) const
     {
-        bool allFallbackLevel = std::all_of(candidates.begin(), candidates.end(), [&](BotCandidate const& candidate)
-        {
-            return candidate.Level == _botFallbackLevel;
-        });
-
-        if (allFallbackLevel)
-            return PickRandom(candidates);
-
-        uint32 highestLevel = std::max_element(candidates.begin(), candidates.end(), [](BotCandidate const& left, BotCandidate const& right)
-        {
-            return left.Level < right.Level;
-        })->Level;
-
-        std::vector<BotCandidate> highestCandidates;
-        std::copy_if(candidates.begin(), candidates.end(), std::back_inserter(highestCandidates), [highestLevel](BotCandidate const& candidate)
-        {
-            return candidate.Level == highestLevel;
-        });
-
-        return PickRandom(highestCandidates);
-    }
-
-    BotCandidate PickRandom(std::vector<BotCandidate> const& candidates) const
-    {
-        return candidates[urand(0, static_cast<uint32>(candidates.size() - 1))];
+        static_assert(N > 0, "Announcer name pools cannot be empty");
+        return names[urand(0, static_cast<uint32>(N - 1))];
     }
 
     std::string FormatAnnouncement(WorldBuffEvent const& event, std::string const& announcerName) const
@@ -355,8 +323,6 @@ private:
     uint32 _varianceMinutes = 60;
     uint32 _initialMinMinutes = 30;
     uint32 _initialMaxMinutes = 150;
-    uint32 _botFallbackLevel = 60;
-    std::string _fallbackAnnouncerName = "A wandering hero";
 };
 
 void AddWorldBuffBotsScripts()

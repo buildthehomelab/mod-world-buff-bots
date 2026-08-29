@@ -32,22 +32,8 @@ WorldBuffBots.InitialMinMinutes = 30
 WorldBuffBots.InitialMaxMinutes = 150
 
 #
-# WorldBuffBots.BotFallbackLevel
-#   If no bot is in the event area, pick any online bot at this level.
-#   Default: 60
-#
-WorldBuffBots.BotFallbackLevel = 60
-
-#
-# WorldBuffBots.FallbackAnnouncerName
-#   Used only if no online bot can be found at all.
-#   Default: A wandering hero
-#
-WorldBuffBots.FallbackAnnouncerName = A wandering hero
-
-#
 # Warchief's Blessing
-#   Chooses the announcement name from bots in Orgrimmar.
+#   Chooses a random Horde-style name for the announcement.
 #   Applies spell 16609 to eligible players in Orgrimmar.
 #   IncludeCrossroads also applies the buff to eligible players in the Crossroads
 #   10 seconds later, matching AzerothCore's existing Thrall reward script.
@@ -58,7 +44,7 @@ WorldBuffBots.Warchief.Announcement = Rend Blackhand has fallen! Thrall has gran
 
 #
 # Rallying Cry of the Dragonslayer
-#   Chooses the announcement name from bots in Stormwind.
+#   Chooses a random Alliance-style name for the announcement.
 #   Applies spell 22888 to eligible players in Stormwind.
 #
 WorldBuffBots.Dragonslayer.Enable = 1
@@ -66,7 +52,7 @@ WorldBuffBots.Dragonslayer.Announcement = {player} has returned the head of Onyx
 
 #
 # Spirit of Zandalar
-#   Chooses the announcement name from bots in Stranglethorn Vale.
+#   Chooses a random name from either faction's name pool.
 #   Applies spell 24425 to eligible players in Stranglethorn Vale.
 #
 WorldBuffBots.Zandalar.Enable = 1
