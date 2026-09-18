@@ -35,9 +35,10 @@ WorldBuffBots.InitialMaxMinutes = 150
 #
 # WorldBuffBots.WarningMinutes
 #   How long before a buff fires the heads-up announcement goes out, so players
-#   have time to travel and catch it. The warning names the same announcer the
-#   final announcement will name, and goes only to the faction that can receive
-#   the buff. Set to 0 to disable warnings.
+#   have time to travel and catch it. The warning states the realm clock time
+#   the buff will drop, names the same announcer the final announcement will
+#   name, and goes only to the faction that can receive the buff.
+#   Set to 0 to disable warnings.
 #   If a rerolled timer lands shorter than this, the warning fires on the next
 #   world update and reports the time actually remaining.
 #   Default: 10
@@ -65,11 +66,21 @@ WorldBuffBots.RestrictBuffToFaction = 1
 #
 
 #
+# WorldBuffBots.TimeFormat
+#   strftime format used for {time} in warnings. Realm time is the worldserver's
+#   local time, which is what the in-game clock shows players.
+#   Default: %H:%M  (24 hour, e.g. 20:35)
+#   For a 12 hour clock use: %I:%M %p  (e.g. 08:35 PM)
+#
+WorldBuffBots.TimeFormat = %H:%M
+
+#
 # Announcement and warning placeholders
-#   {player}  the randomly generated announcer name
-#   {buff}    the buff name, e.g. Warchief's Blessing
-#   {time}    time remaining, e.g. "10 minutes" (warnings only)
-#   {minutes} time remaining as a bare number (warnings only)
+#   {player}   the randomly generated announcer name
+#   {buff}     the buff name, e.g. Warchief's Blessing
+#   {time}     realm clock time the buff drops, e.g. 20:35 (warnings only)
+#   {duration} time remaining, e.g. "10 minutes" (warnings only)
+#   {minutes}  time remaining as a bare number (warnings only)
 #
 #   Set a warning to an empty value to suppress it for that buff only.
 #
@@ -84,7 +95,7 @@ WorldBuffBots.RestrictBuffToFaction = 1
 #
 WorldBuffBots.Warchief.Enable = 1
 WorldBuffBots.Warchief.IncludeCrossroads = 1
-WorldBuffBots.Warchief.Warning = {player} is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing in about {time}!
+WorldBuffBots.Warchief.Warning = {player} is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing drops at {time} realm time!
 WorldBuffBots.Warchief.Announcement = Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of {player}.
 
 #
@@ -94,7 +105,7 @@ WorldBuffBots.Warchief.Announcement = Rend Blackhand has fallen! Thrall has gran
 #   Applies spell 22888 to eligible players in Stormwind.
 #
 WorldBuffBots.Dragonslayer.Enable = 1
-WorldBuffBots.Dragonslayer.Warning = {player} is carrying the head of Onyxia to Stormwind. Rallying Cry of the Dragonslayer in about {time}!
+WorldBuffBots.Dragonslayer.Warning = {player} is carrying the head of Onyxia to Stormwind. Rallying Cry of the Dragonslayer drops at {time} realm time!
 WorldBuffBots.Dragonslayer.Announcement = {player} has returned the head of Onyxia! Rallying Cry of the Dragonslayer echoes through Stormwind.
 
 #
@@ -102,10 +113,11 @@ WorldBuffBots.Dragonslayer.Announcement = {player} has returned the head of Onyx
 #   Chooses a random name from either faction's name pool.
 #   Announced to both factions.
 #   Fires OffsetMinutes after the city turn-ins, so with the default 10 minute
-#   warning the heads-up goes out just as the city buffs land.
+#   warning the heads-up goes out just as the city buffs land, telling players
+#   the realm time to be at Zul'Gurub by.
 #   Applies spell 24425 to eligible players in Stranglethorn Vale.
 #
 WorldBuffBots.Zandalar.Enable = 1
 WorldBuffBots.Zandalar.OffsetMinutes = 10
-WorldBuffBots.Zandalar.Warning = {player} is carrying the Heart of Hakkar to Yojamba Isle. Spirit of Zandalar in about {time}!
+WorldBuffBots.Zandalar.Warning = {player} is carrying the Heart of Hakkar to Yojamba Isle. Spirit of Zandalar drops at {time} realm time!
 WorldBuffBots.Zandalar.Announcement = {player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.

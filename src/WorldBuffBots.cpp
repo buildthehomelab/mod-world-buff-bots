@@ -10,11 +10,13 @@
 
 #include "AreaDefines.h"
 #include "Config.h"
+#include "GameTime.h"
 #include "Log.h"
 #include "Player.h"
 #include "Random.h"
 #include "ScriptMgr.h"
 #include "SharedDefines.h"
+#include "Timer.h"
 #include "World.h"
 #include "WorldSessionMgr.h"
 
@@ -150,7 +152,7 @@ public:
                 BuffFaction::Horde,
                 0,
                 "Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of {player}.",
-                "{player} is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing in about {time}!",
+                "{player} is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing drops at {time} realm time!",
                 { AREA_ORGRIMMAR }
             },
             {
@@ -160,7 +162,7 @@ public:
                 BuffFaction::Alliance,
                 0,
                 "{player} has returned the head of Onyxia! Rallying Cry of the Dragonslayer echoes through Stormwind.",
-                "{player} is carrying the head of Onyxia to Stormwind. Rallying Cry of the Dragonslayer in about {time}!",
+                "{player} is carrying the head of Onyxia to Stormwind. Rallying Cry of the Dragonslayer drops at {time} realm time!",
                 { AREA_STORMWIND_CITY }
             },
             {
@@ -170,7 +172,7 @@ public:
                 BuffFaction::Both,
                 10,
                 "{player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.",
-                "{player} is carrying the Heart of Hakkar to Yojamba Isle. Spirit of Zandalar in about {time}!",
+                "{player} is carrying the Heart of Hakkar to Yojamba Isle. Spirit of Zandalar drops at {time} realm time!",
                 { AREA_STRANGLETHORN_VALE }
             }
         }}
@@ -239,6 +241,7 @@ private:
         _initialMaxMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.InitialMaxMinutes", 150);
         _warningLeadMs = MinutesToMs(sConfigMgr->GetOption<uint32>("WorldBuffBots.WarningMinutes", 10));
         _restrictBuffToFaction = sConfigMgr->GetOption<bool>("WorldBuffBots.RestrictBuffToFaction", true);
+        _timeFormat = sConfigMgr->GetOption<std::string>("WorldBuffBots.TimeFormat", "%H:%M");
         _warchiefCrossroads = sConfigMgr->GetOption<bool>("WorldBuffBots.Warchief.IncludeCrossroads", true);
 
         for (WorldBuffEvent& event : _events)
@@ -331,17 +334,29 @@ private:
             return;
 
         uint32 minutes = (event.TimerMs + MS_PER_MINUTE - 1) / MS_PER_MINUTE;
+        std::string realmTime = FormatRealmTime(event.TimerMs);
 
         std::string message = event.Warning;
         ReplaceAll(message, "{player}", event.PendingAnnouncer);
         ReplaceAll(message, "{buff}", event.Label);
+        ReplaceAll(message, "{time}", realmTime);
         ReplaceAll(message, "{minutes}", std::to_string(minutes));
-        ReplaceAll(message, "{time}", FormatMinutes(minutes));
+        ReplaceAll(message, "{duration}", FormatMinutes(minutes));
 
         SendFactionMessage(event.Faction, message);
 
         if (_debug)
-            LOG_INFO("module", "WorldBuffBots: warned {} minutes ahead of {}", minutes, event.Label);
+            LOG_INFO("module", "WorldBuffBots: warned that {} drops at {} realm time ({} minutes out)",
+                event.Label, realmTime, minutes);
+    }
+
+    // The client's realm clock is built from the server's local time (see
+    // ByteBuffer::AppendPackedTime), so formatting local time here matches the
+    // clock players actually read in game.
+    std::string FormatRealmTime(uint32 fromNowMs) const
+    {
+        Seconds firesAt = GameTime::GetGameTime() + Seconds(fromNowMs / IN_MILLISECONDS);
+        return Acore::Time::TimeToTimestampStr(firesAt, _timeFormat);
     }
 
     void FireEvent(WorldBuffEvent const& event)
@@ -463,6 +478,7 @@ private:
     uint32 _initialMinMinutes = 30;
     uint32 _initialMaxMinutes = 150;
     uint32 _warningLeadMs = 10 * MS_PER_MINUTE;
+    std::string _timeFormat = "%H:%M";
 };
 
 void AddWorldBuffBotsScripts()

@@ -18,18 +18,20 @@ A cycle runs like this, with default settings:
 
 | Time | What happens |
 | --- | --- |
-| `T - 10 min` | Horde and Alliance both get their warning |
+| `T - 10 min` | Horde and Alliance both get their warning, naming the realm time `T` |
 | `T` | Warchief's Blessing drops in Orgrimmar, Rallying Cry drops in Stormwind, and the ZG warning goes out |
 | `T + 10 min` | Spirit of Zandalar drops in Stranglethorn Vale |
 | `T + 90 min` | Next cycle's city turn-in |
 
 The ZG warning lands exactly as the city buffs drop, which is what gives players the full 10 minutes to get down there.
 
-Every buff announces itself twice. **Before it fires**, a heads-up goes out so players have time to travel:
+Every buff announces itself twice. **Before it fires**, a heads-up goes out naming the realm clock time the buff will drop, so players can decide whether they can make it:
 
 ```
-Azgora is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing in about 10 minutes!
+Azgora is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing drops at 20:35 realm time!
 ```
+
+Realm time is the worldserver's local time, which is exactly what the in-game clock shows players — the module formats it the same way the core builds the client's clock.
 
 **When it fires**, the module announces the turn-in and applies the actual buff spell to alive, non-GM players in the relevant area or zone:
 
@@ -66,6 +68,7 @@ Key settings in `mod_world_buff_bots.conf`:
 | `WorldBuffBots.BaseMinutes` / `.VarianceMinutes` | `90` / `60` | Reroll window between city turn-ins. |
 | `WorldBuffBots.Zandalar.OffsetMinutes` | `10` | How long after the city buffs ZG fires. |
 | `WorldBuffBots.<Buff>.OffsetMinutes` | `0` | Per-buff offset within the cycle. |
+| `WorldBuffBots.TimeFormat` | `%H:%M` | `strftime` format for `{time}`. Use `%I:%M %p` for a 12 hour clock. |
 | `WorldBuffBots.<Buff>.Warning` | per buff | Warning text. Leave empty to suppress that buff's warning. |
 | `WorldBuffBots.<Buff>.Announcement` | per buff | Turn-in text. |
 
@@ -73,8 +76,15 @@ Placeholders usable in both messages:
 
 - `{player}` — the generated announcer name
 - `{buff}` — the buff name, e.g. `Warchief's Blessing`
-- `{time}` — time remaining, e.g. `10 minutes` (warnings only)
+- `{time}` — realm clock time the buff drops, e.g. `20:35` (warnings only)
+- `{duration}` — time remaining, e.g. `10 minutes` (warnings only)
 - `{minutes}` — time remaining as a bare number (warnings only)
+
+If you prefer the countdown phrasing, use `{duration}` instead:
+
+```ini
+WorldBuffBots.Warchief.Warning = {player} is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing in about {duration}!
+```
 
 If a rerolled timer happens to land shorter than `WarningMinutes`, the warning still goes out on the next world update and reports the time actually remaining rather than a stale 10 minutes.
 
