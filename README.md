@@ -2,31 +2,44 @@
 
 Created by Rockhopper1776
 
-Drop-in module for standard AzerothCore. It does not require `mod-playerbots` or the Playerbots core fork. It simulates classic world buff turn-ins on independent randomized timers:
+Drop-in module for standard AzerothCore. It does not require `mod-playerbots` or the Playerbots core fork. It simulates classic world buff turn-ins:
 
 - Warchief's Blessing, spell `16609` — Horde
 - Rallying Cry of the Dragonslayer, spell `22888` — Alliance
 - Spirit of Zandalar, spell `24425` — both factions
 
-Each timer defaults to `90 +/- 60` minutes, so every buff rerolls independently between 30 and 150 minutes after it fires. Timers are not persistent; they reroll on worldserver startup and config reload.
+All three share **one cycle**, so the Horde and Alliance city turn-ins always land at the same moment and neither faction gets a head start. Spirit of Zandalar fires 10 minutes later in that same cycle, giving anyone who caught a city buff time to travel down to Zul'Gurub for it.
+
+The cycle defaults to `90 +/- 60` minutes between city turn-ins, so it rerolls between 30 and 150 minutes. Timers are not persistent; they reroll on worldserver startup and config reload.
 
 ## Behavior
 
-Each buff runs a two-step cycle.
+A cycle runs like this, with default settings:
 
-**10 minutes before it fires**, the module sends a heads-up so players have time to travel and catch the buff:
+| Time | What happens |
+| --- | --- |
+| `T - 10 min` | Horde and Alliance both get their warning |
+| `T` | Warchief's Blessing drops in Orgrimmar, Rallying Cry drops in Stormwind, and the ZG warning goes out |
+| `T + 10 min` | Spirit of Zandalar drops in Stranglethorn Vale |
+| `T + 90 min` | Next cycle's city turn-in |
+
+The ZG warning lands exactly as the city buffs drop, which is what gives players the full 10 minutes to get down there.
+
+Every buff announces itself twice. **Before it fires**, a heads-up goes out so players have time to travel:
 
 ```
 Azgora is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing in about 10 minutes!
 ```
 
-**When the timer expires**, it announces the turn-in and applies the actual buff spell to alive, non-GM players in the relevant area or zone:
+**When it fires**, the module announces the turn-in and applies the actual buff spell to alive, non-GM players in the relevant area or zone:
 
 ```
 Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of Azgora.
 ```
 
-The announcer name is a random generated name from a built-in faction-appropriate pool. It is chosen when the timer is armed, so the warning and the announcement always name the same character.
+The announcer name is a random generated name from a built-in faction-appropriate pool. It is chosen when the cycle is armed, so the warning and the announcement always name the same character.
+
+The next cycle is measured from the city turn-in, not from Spirit of Zandalar, so changing the ZG offset delays that buff without stretching the gap between cycles.
 
 ### Faction targeting
 
@@ -50,7 +63,9 @@ Key settings in `mod_world_buff_bots.conf`:
 | --- | --- | --- |
 | `WorldBuffBots.WarningMinutes` | `10` | Lead time on the heads-up announcement. `0` disables warnings. |
 | `WorldBuffBots.RestrictBuffToFaction` | `1` | Only buff players of the buff's own faction. |
-| `WorldBuffBots.BaseMinutes` / `.VarianceMinutes` | `90` / `60` | Reroll window between firings. |
+| `WorldBuffBots.BaseMinutes` / `.VarianceMinutes` | `90` / `60` | Reroll window between city turn-ins. |
+| `WorldBuffBots.Zandalar.OffsetMinutes` | `10` | How long after the city buffs ZG fires. |
+| `WorldBuffBots.<Buff>.OffsetMinutes` | `0` | Per-buff offset within the cycle. |
 | `WorldBuffBots.<Buff>.Warning` | per buff | Warning text. Leave empty to suppress that buff's warning. |
 | `WorldBuffBots.<Buff>.Announcement` | per buff | Turn-in text. |
 
@@ -76,15 +91,16 @@ The settings `WorldBuffBots.BotFallbackLevel` and `WorldBuffBots.FallbackAnnounc
 For quick testing, set:
 
 ```ini
-WorldBuffBots.InitialMinMinutes = 3
-WorldBuffBots.InitialMaxMinutes = 3
-WorldBuffBots.BaseMinutes = 3
+WorldBuffBots.InitialMinMinutes = 5
+WorldBuffBots.InitialMaxMinutes = 5
+WorldBuffBots.BaseMinutes = 5
 WorldBuffBots.VarianceMinutes = 0
 WorldBuffBots.WarningMinutes = 2
+WorldBuffBots.Zandalar.OffsetMinutes = 2
 WorldBuffBots.Debug = 1
 ```
 
-Keep `WarningMinutes` below the timer length or the warning will fire almost immediately after each reroll.
+Keep `WarningMinutes` below the cycle length or the warning will fire almost immediately after each reroll, and keep `Zandalar.OffsetMinutes` below it too or the ZG warning will arrive before the city buffs drop.
 
 ## Notes
 

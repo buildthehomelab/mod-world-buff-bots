@@ -2,6 +2,10 @@
  * Simulates classic world buff turn-ins by choosing a faction-appropriate
  * character name, warning that faction ahead of time, announcing the event,
  * and applying the actual world buffs.
+ *
+ * All buffs share one cycle so the Horde and Alliance city turn-ins land at the
+ * same moment. Spirit of Zandalar is offset later within that same cycle, so
+ * players who caught a city buff have time to travel to Zul'Gurub for it.
  */
 
 #include "AreaDefines.h"
@@ -17,6 +21,7 @@
 #include <algorithm>
 #include <array>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -57,19 +62,36 @@ struct DelayedCast
 
 struct WorldBuffEvent
 {
+    WorldBuffEvent(char const* key, char const* label, uint32 spellId, BuffFaction faction,
+        uint32 defaultOffsetMinutes, char const* defaultAnnouncement, char const* defaultWarning,
+        std::vector<uint32> targetAreaIds)
+        : Key(key), Label(label), SpellId(spellId), Faction(faction),
+          DefaultOffsetMinutes(defaultOffsetMinutes), DefaultAnnouncement(defaultAnnouncement),
+          DefaultWarning(defaultWarning), TargetAreaIds(std::move(targetAreaIds))
+    {
+    }
+
+    // Fixed description of the event, set once at construction.
     char const* Key;
     char const* Label;
     uint32 SpellId;
     BuffFaction Faction;
-    bool Enabled;
-    uint32 TimerMs;
-    bool WarningSent;
-    std::string PendingAnnouncer;
-    std::string DefaultAnnouncement;
-    std::string Announcement;
-    std::string DefaultWarning;
-    std::string Warning;
+    uint32 DefaultOffsetMinutes;
+    char const* DefaultAnnouncement;
+    char const* DefaultWarning;
     std::vector<uint32> TargetAreaIds;
+
+    // Reloaded from the config file.
+    bool Enabled = true;
+    uint32 OffsetMs = 0;
+    std::string Announcement;
+    std::string Warning;
+
+    // State for the cycle currently in flight.
+    uint32 TimerMs = 0;
+    bool Pending = false;
+    bool WarningSent = false;
+    std::string PendingAnnouncer;
 };
 
 bool IsInAreaOrZone(Player const* player, uint32 areaId)
@@ -126,14 +148,9 @@ public:
                 "Warchief's Blessing",
                 SPELL_WARCHIEFS_BLESSING,
                 BuffFaction::Horde,
-                true,
                 0,
-                false,
-                {},
                 "Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of {player}.",
-                {},
                 "{player} is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing in about {time}!",
-                {},
                 { AREA_ORGRIMMAR }
             },
             {
@@ -141,14 +158,9 @@ public:
                 "Rallying Cry of the Dragonslayer",
                 SPELL_RALLYING_CRY_OF_THE_DRAGONSLAYER,
                 BuffFaction::Alliance,
-                true,
                 0,
-                false,
-                {},
                 "{player} has returned the head of Onyxia! Rallying Cry of the Dragonslayer echoes through Stormwind.",
-                {},
                 "{player} is carrying the head of Onyxia to Stormwind. Rallying Cry of the Dragonslayer in about {time}!",
-                {},
                 { AREA_STORMWIND_CITY }
             },
             {
@@ -156,14 +168,9 @@ public:
                 "Spirit of Zandalar",
                 SPELL_SPIRIT_OF_ZANDALAR,
                 BuffFaction::Both,
-                true,
-                0,
-                false,
-                {},
+                10,
                 "{player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.",
-                {},
                 "{player} is carrying the Heart of Hakkar to Yojamba Isle. Spirit of Zandalar in about {time}!",
-                {},
                 { AREA_STRANGLETHORN_VALE }
             }
         }}
@@ -195,7 +202,7 @@ public:
 
         for (WorldBuffEvent& event : _events)
         {
-            if (!event.Enabled)
+            if (!event.Enabled || !event.Pending)
                 continue;
 
             if (!event.WarningSent && _warningLeadMs && event.TimerMs <= _warningLeadMs)
@@ -207,13 +214,18 @@ public:
             if (event.TimerMs <= diff)
             {
                 FireEvent(event);
-                ArmEvent(event, RollMainDelayMs());
+                event.Pending = false;
             }
             else
             {
                 event.TimerMs -= diff;
             }
         }
+
+        // The whole cycle rerolls together, but only once its last offset event
+        // has fired, so an in-flight Spirit of Zandalar is never clobbered.
+        if (HasEnabledEvent() && !IsCycleInFlight())
+            ArmCycle(RollMainDelayMs(), true);
     }
 
 private:
@@ -235,6 +247,7 @@ private:
             prefix += event.Key;
 
             event.Enabled = sConfigMgr->GetOption<bool>(prefix + ".Enable", true);
+            event.OffsetMs = MinutesToMs(sConfigMgr->GetOption<uint32>(prefix + ".OffsetMinutes", event.DefaultOffsetMinutes));
             event.Announcement = sConfigMgr->GetOption<std::string>(prefix + ".Announcement", event.DefaultAnnouncement);
             event.Warning = sConfigMgr->GetOption<std::string>(prefix + ".Warning", event.DefaultWarning);
         }
@@ -242,22 +255,55 @@ private:
 
     void ResetTimers()
     {
-        for (WorldBuffEvent& event : _events)
-            ArmEvent(event, RollInitialDelayMs());
+        ArmCycle(RollInitialDelayMs(), false);
 
         if (_debug)
             LOG_INFO("module", "WorldBuffBots: timers reset");
     }
 
-    void ArmEvent(WorldBuffEvent& event, uint32 delayMs)
+    bool HasEnabledEvent() const
     {
-        event.TimerMs = delayMs;
-        event.WarningSent = false;
-        event.PendingAnnouncer = SelectAnnouncerName(event.Faction);
+        return std::any_of(_events.begin(), _events.end(),
+            [](WorldBuffEvent const& event) { return event.Enabled; });
+    }
 
-        if (_debug)
-            LOG_INFO("module", "WorldBuffBots: {} armed for {} minutes with announcer '{}'",
-                event.Label, delayMs / MS_PER_MINUTE, event.PendingAnnouncer);
+    bool IsCycleInFlight() const
+    {
+        return std::any_of(_events.begin(), _events.end(),
+            [](WorldBuffEvent const& event) { return event.Enabled && event.Pending; });
+    }
+
+    // Largest offset among enabled events, i.e. how long a cycle runs from the
+    // city turn-in until its last event has fired.
+    uint32 CycleTailMs() const
+    {
+        uint32 tail = 0;
+        for (WorldBuffEvent const& event : _events)
+            if (event.Enabled)
+                tail = std::max(tail, event.OffsetMs);
+
+        return tail;
+    }
+
+    // delayMs is measured between consecutive city turn-ins. A reroll happens
+    // once the cycle's tail has already elapsed, so subtract it back out to
+    // keep that spacing honest.
+    void ArmCycle(uint32 delayMs, bool subtractTail)
+    {
+        uint32 tailMs = subtractTail ? CycleTailMs() : 0;
+        uint32 cityDelayMs = delayMs > tailMs ? delayMs - tailMs : 1;
+
+        for (WorldBuffEvent& event : _events)
+        {
+            event.TimerMs = cityDelayMs + event.OffsetMs;
+            event.Pending = true;
+            event.WarningSent = false;
+            event.PendingAnnouncer = SelectAnnouncerName(event.Faction);
+
+            if (_debug && event.Enabled)
+                LOG_INFO("module", "WorldBuffBots: {} armed for {} minutes with announcer '{}'",
+                    event.Label, event.TimerMs / MS_PER_MINUTE, event.PendingAnnouncer);
+        }
     }
 
     uint32 RollInitialDelayMs() const

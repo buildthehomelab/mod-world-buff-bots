@@ -16,7 +16,8 @@ WorldBuffBots.Debug = 0
 
 #
 # WorldBuffBots.BaseMinutes / WorldBuffBots.VarianceMinutes
-#   Each buff rerolls its next fire time as BaseMinutes +/- VarianceMinutes.
+#   All buffs share one cycle. Each cycle rerolls as BaseMinutes +/-
+#   VarianceMinutes, measured between consecutive city turn-ins.
 #   Default: 90 +/- 60 minutes, meaning 30 to 150 minutes.
 #
 WorldBuffBots.BaseMinutes = 90
@@ -24,7 +25,7 @@ WorldBuffBots.VarianceMinutes = 60
 
 #
 # WorldBuffBots.InitialMinMinutes / WorldBuffBots.InitialMaxMinutes
-#   Startup timers are not persistent. Each buff starts with a random delay in
+#   Timers are not persistent. The first cycle starts with a random delay in
 #   this range after worldserver starts or after a config reload.
 #   Default: 30 to 150 minutes.
 #
@@ -53,6 +54,17 @@ WorldBuffBots.WarningMinutes = 10
 WorldBuffBots.RestrictBuffToFaction = 1
 
 #
+# WorldBuffBots.<Buff>.OffsetMinutes
+#   How long after the city turn-in this buff fires, within the same cycle.
+#   Warchief's Blessing and Rallying Cry of the Dragonslayer are both 0, so the
+#   Horde and Alliance buffs always land at the same moment. Spirit of Zandalar
+#   defaults to 10, giving players who caught a city buff time to travel down to
+#   Zul'Gurub for it.
+#   The next cycle is measured from the city turn-in, so a longer offset delays
+#   Spirit of Zandalar without stretching the gap between cycles.
+#
+
+#
 # Announcement and warning placeholders
 #   {player}  the randomly generated announcer name
 #   {buff}    the buff name, e.g. Warchief's Blessing
@@ -65,7 +77,7 @@ WorldBuffBots.RestrictBuffToFaction = 1
 #
 # Warchief's Blessing
 #   Chooses a random Horde-style name for the announcement.
-#   Announced to Horde players only.
+#   Announced to Horde players only, at the same moment as Rallying Cry.
 #   Applies spell 16609 to eligible players in Orgrimmar.
 #   IncludeCrossroads also applies the buff to eligible players in the Crossroads
 #   10 seconds later, matching AzerothCore's existing Thrall reward script.
@@ -78,7 +90,7 @@ WorldBuffBots.Warchief.Announcement = Rend Blackhand has fallen! Thrall has gran
 #
 # Rallying Cry of the Dragonslayer
 #   Chooses a random Alliance-style name for the announcement.
-#   Announced to Alliance players only.
+#   Announced to Alliance players only, at the same moment as Warchief's Blessing.
 #   Applies spell 22888 to eligible players in Stormwind.
 #
 WorldBuffBots.Dragonslayer.Enable = 1
@@ -89,8 +101,11 @@ WorldBuffBots.Dragonslayer.Announcement = {player} has returned the head of Onyx
 # Spirit of Zandalar
 #   Chooses a random name from either faction's name pool.
 #   Announced to both factions.
+#   Fires OffsetMinutes after the city turn-ins, so with the default 10 minute
+#   warning the heads-up goes out just as the city buffs land.
 #   Applies spell 24425 to eligible players in Stranglethorn Vale.
 #
 WorldBuffBots.Zandalar.Enable = 1
+WorldBuffBots.Zandalar.OffsetMinutes = 10
 WorldBuffBots.Zandalar.Warning = {player} is carrying the Heart of Hakkar to Yojamba Isle. Spirit of Zandalar in about {time}!
 WorldBuffBots.Zandalar.Announcement = {player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.
