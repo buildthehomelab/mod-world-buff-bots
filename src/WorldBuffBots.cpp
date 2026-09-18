@@ -1,6 +1,7 @@
 /*
  * Simulates classic world buff turn-ins by choosing a faction-appropriate
- * character name, announcing the event, and applying the actual world buffs.
+ * character name, warning that faction ahead of time, announcing the event,
+ * and applying the actual world buffs.
  */
 
 #include "AreaDefines.h"
@@ -9,6 +10,7 @@
 #include "Player.h"
 #include "Random.h"
 #include "ScriptMgr.h"
+#include "SharedDefines.h"
 #include "World.h"
 #include "WorldSessionMgr.h"
 
@@ -24,11 +26,11 @@ constexpr uint32 SPELL_RALLYING_CRY_OF_THE_DRAGONSLAYER = 22888;
 constexpr uint32 SPELL_SPIRIT_OF_ZANDALAR = 24425;
 constexpr uint32 MS_PER_MINUTE = 60 * IN_MILLISECONDS;
 
-enum class AnnouncerNamePool
+enum class BuffFaction
 {
     Alliance,
     Horde,
-    Either
+    Both
 };
 
 constexpr std::array<char const*, 24> ALLIANCE_ANNOUNCER_NAMES = {{
@@ -49,6 +51,7 @@ struct DelayedCast
 {
     uint32 SpellId;
     uint32 AreaId;
+    BuffFaction Faction;
     uint32 TimerMs;
 };
 
@@ -57,11 +60,15 @@ struct WorldBuffEvent
     char const* Key;
     char const* Label;
     uint32 SpellId;
-    AnnouncerNamePool NamePool;
+    BuffFaction Faction;
     bool Enabled;
     uint32 TimerMs;
+    bool WarningSent;
+    std::string PendingAnnouncer;
     std::string DefaultAnnouncement;
     std::string Announcement;
+    std::string DefaultWarning;
+    std::string Warning;
     std::vector<uint32> TargetAreaIds;
 };
 
@@ -75,9 +82,23 @@ bool IsEligibleTarget(Player const* player)
     return player && player->IsInWorld() && player->IsAlive() && !player->IsGameMaster();
 }
 
+bool MatchesFaction(Player const* player, BuffFaction faction)
+{
+    if (faction == BuffFaction::Both)
+        return true;
+
+    TeamId teamId = faction == BuffFaction::Horde ? TEAM_HORDE : TEAM_ALLIANCE;
+    return player && player->GetTeamId() == teamId;
+}
+
 uint32 MinutesToMs(uint32 minutes)
 {
     return minutes * MS_PER_MINUTE;
+}
+
+std::string FormatMinutes(uint32 minutes)
+{
+    return std::to_string(minutes) + (minutes == 1 ? " minute" : " minutes");
 }
 
 void ReplaceAll(std::string& text, std::string const& token, std::string const& value)
@@ -104,10 +125,14 @@ public:
                 "Warchief",
                 "Warchief's Blessing",
                 SPELL_WARCHIEFS_BLESSING,
-                AnnouncerNamePool::Horde,
+                BuffFaction::Horde,
                 true,
                 0,
+                false,
+                {},
                 "Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of {player}.",
+                {},
+                "{player} is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing in about {time}!",
                 {},
                 { AREA_ORGRIMMAR }
             },
@@ -115,10 +140,14 @@ public:
                 "Dragonslayer",
                 "Rallying Cry of the Dragonslayer",
                 SPELL_RALLYING_CRY_OF_THE_DRAGONSLAYER,
-                AnnouncerNamePool::Alliance,
+                BuffFaction::Alliance,
                 true,
                 0,
+                false,
+                {},
                 "{player} has returned the head of Onyxia! Rallying Cry of the Dragonslayer echoes through Stormwind.",
+                {},
+                "{player} is carrying the head of Onyxia to Stormwind. Rallying Cry of the Dragonslayer in about {time}!",
                 {},
                 { AREA_STORMWIND_CITY }
             },
@@ -126,10 +155,14 @@ public:
                 "Zandalar",
                 "Spirit of Zandalar",
                 SPELL_SPIRIT_OF_ZANDALAR,
-                AnnouncerNamePool::Either,
+                BuffFaction::Both,
                 true,
                 0,
+                false,
+                {},
                 "{player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.",
+                {},
+                "{player} is carrying the Heart of Hakkar to Yojamba Isle. Spirit of Zandalar in about {time}!",
                 {},
                 { AREA_STRANGLETHORN_VALE }
             }
@@ -165,10 +198,16 @@ public:
             if (!event.Enabled)
                 continue;
 
+            if (!event.WarningSent && _warningLeadMs && event.TimerMs <= _warningLeadMs)
+            {
+                SendWarning(event);
+                event.WarningSent = true;
+            }
+
             if (event.TimerMs <= diff)
             {
                 FireEvent(event);
-                event.TimerMs = RollMainDelayMs();
+                ArmEvent(event, RollMainDelayMs());
             }
             else
             {
@@ -186,6 +225,8 @@ private:
         _varianceMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.VarianceMinutes", 60);
         _initialMinMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.InitialMinMinutes", 30);
         _initialMaxMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.InitialMaxMinutes", 150);
+        _warningLeadMs = MinutesToMs(sConfigMgr->GetOption<uint32>("WorldBuffBots.WarningMinutes", 10));
+        _restrictBuffToFaction = sConfigMgr->GetOption<bool>("WorldBuffBots.RestrictBuffToFaction", true);
         _warchiefCrossroads = sConfigMgr->GetOption<bool>("WorldBuffBots.Warchief.IncludeCrossroads", true);
 
         for (WorldBuffEvent& event : _events)
@@ -195,16 +236,28 @@ private:
 
             event.Enabled = sConfigMgr->GetOption<bool>(prefix + ".Enable", true);
             event.Announcement = sConfigMgr->GetOption<std::string>(prefix + ".Announcement", event.DefaultAnnouncement);
+            event.Warning = sConfigMgr->GetOption<std::string>(prefix + ".Warning", event.DefaultWarning);
         }
     }
 
     void ResetTimers()
     {
         for (WorldBuffEvent& event : _events)
-            event.TimerMs = RollInitialDelayMs();
+            ArmEvent(event, RollInitialDelayMs());
 
         if (_debug)
             LOG_INFO("module", "WorldBuffBots: timers reset");
+    }
+
+    void ArmEvent(WorldBuffEvent& event, uint32 delayMs)
+    {
+        event.TimerMs = delayMs;
+        event.WarningSent = false;
+        event.PendingAnnouncer = SelectAnnouncerName(event.Faction);
+
+        if (_debug)
+            LOG_INFO("module", "WorldBuffBots: {} armed for {} minutes with announcer '{}'",
+                event.Label, delayMs / MS_PER_MINUTE, event.PendingAnnouncer);
     }
 
     uint32 RollInitialDelayMs() const
@@ -225,22 +278,41 @@ private:
         return MinutesToMs(urand(minMinutes, maxMinutes));
     }
 
+    void SendWarning(WorldBuffEvent const& event) const
+    {
+        // A reroll shorter than the lead time leaves no useful warning window.
+        if (event.Warning.empty() || event.TimerMs < MS_PER_MINUTE)
+            return;
+
+        uint32 minutes = (event.TimerMs + MS_PER_MINUTE - 1) / MS_PER_MINUTE;
+
+        std::string message = event.Warning;
+        ReplaceAll(message, "{player}", event.PendingAnnouncer);
+        ReplaceAll(message, "{buff}", event.Label);
+        ReplaceAll(message, "{minutes}", std::to_string(minutes));
+        ReplaceAll(message, "{time}", FormatMinutes(minutes));
+
+        SendFactionMessage(event.Faction, message);
+
+        if (_debug)
+            LOG_INFO("module", "WorldBuffBots: warned {} minutes ahead of {}", minutes, event.Label);
+    }
+
     void FireEvent(WorldBuffEvent const& event)
     {
-        std::string announcerName = SelectAnnouncerName(event.NamePool);
-        std::string announcement = FormatAnnouncement(event, announcerName);
+        std::string announcement = FormatAnnouncement(event, event.PendingAnnouncer);
 
-        sWorldSessionMgr->SendServerMessage(SERVER_MSG_STRING, announcement);
+        SendFactionMessage(event.Faction, announcement);
 
         uint32 appliedCount = 0;
         for (uint32 areaId : event.TargetAreaIds)
-            appliedCount += ApplySpellToArea(event.SpellId, areaId);
+            appliedCount += ApplySpellToArea(event.SpellId, areaId, event.Faction);
 
         if (event.SpellId == SPELL_WARCHIEFS_BLESSING && _warchiefCrossroads)
-            _delayedCasts.push_back({ event.SpellId, AREA_THE_CROSSROADS, 10 * IN_MILLISECONDS });
+            _delayedCasts.push_back({ event.SpellId, AREA_THE_CROSSROADS, event.Faction, 10 * IN_MILLISECONDS });
 
         LOG_INFO("module", "WorldBuffBots: fired {} using announcer '{}' and applied {} immediate buffs",
-            event.Label, announcerName, appliedCount);
+            event.Label, event.PendingAnnouncer, appliedCount);
     }
 
     void UpdateDelayedCasts(uint32 diff)
@@ -249,7 +321,7 @@ private:
         {
             if (itr->TimerMs <= diff)
             {
-                uint32 appliedCount = ApplySpellToArea(itr->SpellId, itr->AreaId);
+                uint32 appliedCount = ApplySpellToArea(itr->SpellId, itr->AreaId, itr->Faction);
 
                 if (_debug)
                     LOG_INFO("module", "WorldBuffBots: delayed spell {} applied to {} players in area {}", itr->SpellId, appliedCount, itr->AreaId);
@@ -264,13 +336,33 @@ private:
         }
     }
 
-    uint32 ApplySpellToArea(uint32 spellId, uint32 areaId) const
+    void SendFactionMessage(BuffFaction faction, std::string const& message) const
+    {
+        if (faction == BuffFaction::Both)
+        {
+            sWorldSessionMgr->SendServerMessage(SERVER_MSG_STRING, message);
+            return;
+        }
+
+        sWorldSessionMgr->DoForAllOnlinePlayers([&](Player* player)
+        {
+            if (!player || !player->IsInWorld() || !MatchesFaction(player, faction))
+                return;
+
+            sWorldSessionMgr->SendServerMessage(SERVER_MSG_STRING, message, player);
+        });
+    }
+
+    uint32 ApplySpellToArea(uint32 spellId, uint32 areaId, BuffFaction faction) const
     {
         uint32 appliedCount = 0;
 
         sWorldSessionMgr->DoForAllOnlinePlayers([&](Player* player)
         {
             if (!IsEligibleTarget(player) || !IsInAreaOrZone(player, areaId))
+                return;
+
+            if (_restrictBuffToFaction && !MatchesFaction(player, faction))
                 return;
 
             player->CastSpell(player, spellId, true);
@@ -280,15 +372,15 @@ private:
         return appliedCount;
     }
 
-    std::string SelectAnnouncerName(AnnouncerNamePool namePool) const
+    std::string SelectAnnouncerName(BuffFaction faction) const
     {
-        switch (namePool)
+        switch (faction)
         {
-            case AnnouncerNamePool::Alliance:
+            case BuffFaction::Alliance:
                 return PickRandomName(ALLIANCE_ANNOUNCER_NAMES);
-            case AnnouncerNamePool::Horde:
+            case BuffFaction::Horde:
                 return PickRandomName(HORDE_ANNOUNCER_NAMES);
-            case AnnouncerNamePool::Either:
+            case BuffFaction::Both:
                 return urand(0, 1) == 0
                     ? PickRandomName(ALLIANCE_ANNOUNCER_NAMES)
                     : PickRandomName(HORDE_ANNOUNCER_NAMES);
@@ -318,11 +410,13 @@ private:
 
     bool _enabled = true;
     bool _debug = false;
+    bool _restrictBuffToFaction = true;
     bool _warchiefCrossroads = true;
     uint32 _baseMinutes = 90;
     uint32 _varianceMinutes = 60;
     uint32 _initialMinMinutes = 30;
     uint32 _initialMaxMinutes = 150;
+    uint32 _warningLeadMs = 10 * MS_PER_MINUTE;
 };
 
 void AddWorldBuffBotsScripts()

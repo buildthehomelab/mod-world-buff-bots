@@ -4,24 +4,64 @@ Created by Rockhopper1776
 
 Drop-in module for standard AzerothCore. It does not require `mod-playerbots` or the Playerbots core fork. It simulates classic world buff turn-ins on independent randomized timers:
 
-- Warchief's Blessing, spell `16609`
-- Rallying Cry of the Dragonslayer, spell `22888`
-- Spirit of Zandalar, spell `24425`
+- Warchief's Blessing, spell `16609` — Horde
+- Rallying Cry of the Dragonslayer, spell `22888` — Alliance
+- Spirit of Zandalar, spell `24425` — both factions
 
 Each timer defaults to `90 +/- 60` minutes, so every buff rerolls independently between 30 and 150 minutes after it fires. Timers are not persistent; they reroll on worldserver startup and config reload.
 
 ## Behavior
 
-When a buff fires, the module:
+Each buff runs a two-step cycle.
 
-1. Chooses a random generated announcer name from a built-in faction-appropriate pool:
-   - Horde for Warchief's Blessing
-   - Alliance for Rallying Cry of the Dragonslayer
-   - Either faction for Spirit of Zandalar
-2. Sends a global announcement using that name.
-3. Applies the actual buff spell to alive, non-GM players in the relevant area or zone.
+**10 minutes before it fires**, the module sends a heads-up so players have time to travel and catch the buff:
+
+```
+Azgora is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing in about 10 minutes!
+```
+
+**When the timer expires**, it announces the turn-in and applies the actual buff spell to alive, non-GM players in the relevant area or zone:
+
+```
+Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of Azgora.
+```
+
+The announcer name is a random generated name from a built-in faction-appropriate pool. It is chosen when the timer is armed, so the warning and the announcement always name the same character.
+
+### Faction targeting
+
+Announcements are sent only to the faction that can act on them:
+
+| Buff | Announced to | Buffs |
+| --- | --- | --- |
+| Warchief's Blessing | Horde | Horde in Orgrimmar (and the Crossroads) |
+| Rallying Cry of the Dragonslayer | Alliance | Alliance in Stormwind |
+| Spirit of Zandalar | Both | Both in Stranglethorn Vale |
+
+By default the buff itself is also restricted to that faction, so an Alliance player standing in Orgrimmar is not silently buffed by an event they never saw announced. Set `WorldBuffBots.RestrictBuffToFaction = 0` to buff everyone in the target area while keeping the announcements faction specific.
 
 Warchief's Blessing also applies to the Crossroads 10 seconds later by default, matching AzerothCore's existing Thrall reward behavior. You can disable that in the config.
+
+## Configuration
+
+Key settings in `mod_world_buff_bots.conf`:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `WorldBuffBots.WarningMinutes` | `10` | Lead time on the heads-up announcement. `0` disables warnings. |
+| `WorldBuffBots.RestrictBuffToFaction` | `1` | Only buff players of the buff's own faction. |
+| `WorldBuffBots.BaseMinutes` / `.VarianceMinutes` | `90` / `60` | Reroll window between firings. |
+| `WorldBuffBots.<Buff>.Warning` | per buff | Warning text. Leave empty to suppress that buff's warning. |
+| `WorldBuffBots.<Buff>.Announcement` | per buff | Turn-in text. |
+
+Placeholders usable in both messages:
+
+- `{player}` — the generated announcer name
+- `{buff}` — the buff name, e.g. `Warchief's Blessing`
+- `{time}` — time remaining, e.g. `10 minutes` (warnings only)
+- `{minutes}` — time remaining as a bare number (warnings only)
+
+If a rerolled timer happens to land shorter than `WarningMinutes`, the warning still goes out on the next world update and reports the time actually remaining rather than a stale 10 minutes.
 
 ## Install
 
@@ -36,12 +76,15 @@ The settings `WorldBuffBots.BotFallbackLevel` and `WorldBuffBots.FallbackAnnounc
 For quick testing, set:
 
 ```ini
-WorldBuffBots.InitialMinMinutes = 1
-WorldBuffBots.InitialMaxMinutes = 1
-WorldBuffBots.BaseMinutes = 1
+WorldBuffBots.InitialMinMinutes = 3
+WorldBuffBots.InitialMaxMinutes = 3
+WorldBuffBots.BaseMinutes = 3
 WorldBuffBots.VarianceMinutes = 0
+WorldBuffBots.WarningMinutes = 2
 WorldBuffBots.Debug = 1
 ```
+
+Keep `WarningMinutes` below the timer length or the warning will fire almost immediately after each reroll.
 
 ## Notes
 
