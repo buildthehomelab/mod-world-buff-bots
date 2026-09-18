@@ -15,18 +15,30 @@ WorldBuffBots.Enable = 1
 WorldBuffBots.Debug = 0
 
 #
-# WorldBuffBots.BaseMinutes / WorldBuffBots.VarianceMinutes
-#   All buffs share one cycle. Each cycle rerolls as BaseMinutes +/-
-#   VarianceMinutes, measured between consecutive city turn-ins.
-#   Default: 90 +/- 60 minutes, meaning 30 to 150 minutes.
+# WorldBuffBots.MinMinutes / WorldBuffBots.MaxMinutes
+#   All buffs share one cycle. When a cycle finishes, the next one is rolled at
+#   random between these two values, inclusive, measured between consecutive
+#   city turn-ins. Every cycle is rolled fresh, so the gap is never predictable.
+#   Set both to the same value for a fixed cycle.
+#   Keep MinMinutes above the largest OffsetMinutes below, or the shortest
+#   cycles get clamped and the module logs a warning on startup.
+#   Default: 30 to 150 minutes.
 #
-WorldBuffBots.BaseMinutes = 90
-WorldBuffBots.VarianceMinutes = 60
+WorldBuffBots.MinMinutes = 30
+WorldBuffBots.MaxMinutes = 150
+
+#
+#   Deprecated: BaseMinutes and VarianceMinutes. If those are still present and
+#   MinMinutes/MaxMinutes are not, they are read as Base-Variance to
+#   Base+Variance so an existing realm keeps its timing, and a warning is
+#   logged. Replace them with the two settings above.
+#
 
 #
 # WorldBuffBots.InitialMinMinutes / WorldBuffBots.InitialMaxMinutes
 #   Timers are not persistent. The first cycle starts with a random delay in
-#   this range after worldserver starts or after a config reload.
+#   this range after worldserver starts or after a config reload. Separate from
+#   MinMinutes/MaxMinutes so you can stagger the first cycle differently.
 #   Default: 30 to 150 minutes.
 #
 WorldBuffBots.InitialMinMinutes = 30

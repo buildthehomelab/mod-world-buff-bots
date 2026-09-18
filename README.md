@@ -10,7 +10,7 @@ Drop-in module for standard AzerothCore. It does not require `mod-playerbots` or
 
 All three share **one cycle**, so the Horde and Alliance city turn-ins always land at the same moment and neither faction gets a head start. Spirit of Zandalar fires 10 minutes later in that same cycle, giving anyone who caught a city buff time to travel down to Zul'Gurub for it.
 
-The cycle defaults to `90 +/- 60` minutes between city turn-ins, so it rerolls between 30 and 150 minutes. Timers are not persistent; they reroll on worldserver startup and config reload.
+Each cycle length is rolled fresh at random between `MinMinutes` and `MaxMinutes` (default 30 to 150), measured between consecutive city turn-ins, so players cannot set a watch by it. Timers are not persistent; they reroll on worldserver startup and config reload.
 
 ## Behavior
 
@@ -21,7 +21,7 @@ A cycle runs like this, with default settings:
 | `T - 10 min` | Horde and Alliance both get their warning, naming the realm time `T` |
 | `T` | Warchief's Blessing drops in Orgrimmar, Rallying Cry drops in Stormwind, and the ZG warning goes out |
 | `T + 10 min` | Spirit of Zandalar drops in Stranglethorn Vale |
-| `T + 90 min` | Next cycle's city turn-in |
+| `T + 30..150 min` | Next cycle's city turn-in, rolled at random |
 
 The ZG warning lands exactly as the city buffs drop, which is what gives players the full 10 minutes to get down there.
 
@@ -65,7 +65,8 @@ Key settings in `mod_world_buff_bots.conf`:
 | --- | --- | --- |
 | `WorldBuffBots.WarningMinutes` | `10` | Lead time on the heads-up announcement. `0` disables warnings. |
 | `WorldBuffBots.RestrictBuffToFaction` | `1` | Only buff players of the buff's own faction. |
-| `WorldBuffBots.BaseMinutes` / `.VarianceMinutes` | `90` / `60` | Reroll window between city turn-ins. |
+| `WorldBuffBots.MinMinutes` / `.MaxMinutes` | `30` / `150` | Random range for each new cycle, between city turn-ins. |
+| `WorldBuffBots.InitialMinMinutes` / `.InitialMaxMinutes` | `30` / `150` | Random range for the first cycle after startup. |
 | `WorldBuffBots.Zandalar.OffsetMinutes` | `10` | How long after the city buffs ZG fires. |
 | `WorldBuffBots.<Buff>.OffsetMinutes` | `0` | Per-buff offset within the cycle. |
 | `WorldBuffBots.TimeFormat` | `%H:%M` | `strftime` format for `{time}`. Use `%I:%M %p` for a 12 hour clock. |
@@ -94,23 +95,27 @@ If a rerolled timer happens to land shorter than `WarningMinutes`, the warning s
 2. Re-run CMake and rebuild worldserver.
 3. Edit `mod_world_buff_bots.conf` if you want different timers, announcements, or enabled buffs. It is normally installed under `env/dist/etc/modules` on Unix-like installations and `env/dist/configs/modules` on Windows.
 
-### Upgrading from the Playerbots-based version
+### Upgrading
 
-The settings `WorldBuffBots.BotFallbackLevel` and `WorldBuffBots.FallbackAnnouncerName` are no longer used. Remove them from an existing `mod_world_buff_bots.conf`; the generated name pools work even when no players or bots are online.
+`WorldBuffBots.BaseMinutes` and `WorldBuffBots.VarianceMinutes` are replaced by `MinMinutes` and `MaxMinutes`. If the old pair is still in your config and the new one is not, it is read as `Base - Variance` to `Base + Variance` so your realm keeps its existing timing, and a warning is logged asking you to switch. The old default of `90 +/- 60` is exactly the new default of `30` to `150`.
+
+From the Playerbots-based version: `WorldBuffBots.BotFallbackLevel` and `WorldBuffBots.FallbackAnnouncerName` are no longer used. Remove them from an existing `mod_world_buff_bots.conf`; the generated name pools work even when no players or bots are online.
 
 For quick testing, set:
 
 ```ini
 WorldBuffBots.InitialMinMinutes = 5
 WorldBuffBots.InitialMaxMinutes = 5
-WorldBuffBots.BaseMinutes = 5
-WorldBuffBots.VarianceMinutes = 0
+WorldBuffBots.MinMinutes = 5
+WorldBuffBots.MaxMinutes = 5
 WorldBuffBots.WarningMinutes = 2
 WorldBuffBots.Zandalar.OffsetMinutes = 2
 WorldBuffBots.Debug = 1
 ```
 
-Keep `WarningMinutes` below the cycle length or the warning will fire almost immediately after each reroll, and keep `Zandalar.OffsetMinutes` below it too or the ZG warning will arrive before the city buffs drop.
+Setting `MinMinutes` and `MaxMinutes` to the same value pins the cycle, which is what you want while testing.
+
+Keep `WarningMinutes` below the cycle length or the warning will fire almost immediately after each reroll, and keep both it and `Zandalar.OffsetMinutes` below `MinMinutes` — otherwise short cycles get clamped and the module warns about it on startup.
 
 ## Notes
 

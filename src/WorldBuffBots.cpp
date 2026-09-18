@@ -235,8 +235,7 @@ private:
     {
         _enabled = sConfigMgr->GetOption<bool>("WorldBuffBots.Enable", true);
         _debug = sConfigMgr->GetOption<bool>("WorldBuffBots.Debug", false);
-        _baseMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.BaseMinutes", 90);
-        _varianceMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.VarianceMinutes", 60);
+        LoadCycleRange();
         _initialMinMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.InitialMinMinutes", 30);
         _initialMaxMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.InitialMaxMinutes", 150);
         _warningLeadMs = MinutesToMs(sConfigMgr->GetOption<uint32>("WorldBuffBots.WarningMinutes", 10));
@@ -256,8 +255,42 @@ private:
         }
     }
 
+    // The cycle length is configured as an explicit [Min, Max] range. Older
+    // configs expressed the same thing as BaseMinutes +/- VarianceMinutes, so
+    // honour those as the defaults when they are still present rather than
+    // silently retiming someone's realm. Read quietly: whichever pair the admin
+    // did not write is legitimately absent.
+    void LoadCycleRange()
+    {
+        uint32 legacyBase = sConfigMgr->GetOption<uint32>("WorldBuffBots.BaseMinutes", 0, false);
+        uint32 legacyVariance = sConfigMgr->GetOption<uint32>("WorldBuffBots.VarianceMinutes", 0, false);
+
+        uint32 defaultMin = 30;
+        uint32 defaultMax = 150;
+
+        if (legacyBase)
+        {
+            defaultMin = legacyBase > legacyVariance ? legacyBase - legacyVariance : 1;
+            defaultMax = legacyBase + legacyVariance;
+
+            LOG_WARN("module", "WorldBuffBots: BaseMinutes/VarianceMinutes are deprecated, using them as {} to {} minutes. "
+                "Replace them with MinMinutes/MaxMinutes in mod_world_buff_bots.conf.", defaultMin, defaultMax);
+        }
+
+        _minMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.MinMinutes", defaultMin, !legacyBase);
+        _maxMinutes = sConfigMgr->GetOption<uint32>("WorldBuffBots.MaxMinutes", defaultMax, !legacyBase);
+    }
+
     void ResetTimers()
     {
+        // CycleTailMs needs the per-event offsets, so this is checked here
+        // rather than in LoadConfig, once offsets are known.
+        uint32 tailMinutes = CycleTailMs() / MS_PER_MINUTE;
+        if (tailMinutes && _minMinutes <= tailMinutes)
+            LOG_WARN("module", "WorldBuffBots: MinMinutes ({}) is not longer than the {} minute offset tail, "
+                "so the shortest cycles will be clamped. Raise MinMinutes above the largest OffsetMinutes.",
+                _minMinutes, tailMinutes);
+
         ArmCycle(RollInitialDelayMs(), false);
 
         if (_debug)
@@ -294,7 +327,7 @@ private:
     void ArmCycle(uint32 delayMs, bool subtractTail)
     {
         uint32 tailMs = subtractTail ? CycleTailMs() : 0;
-        uint32 cityDelayMs = delayMs > tailMs ? delayMs - tailMs : 1;
+        uint32 cityDelayMs = delayMs > tailMs + MS_PER_MINUTE ? delayMs - tailMs : MS_PER_MINUTE;
 
         for (WorldBuffEvent& event : _events)
         {
@@ -309,10 +342,11 @@ private:
         }
     }
 
-    uint32 RollInitialDelayMs() const
+    // Every cycle length is rolled fresh in [min, max] minutes, inclusive.
+    static uint32 RollDelayMs(uint32 minMinutes, uint32 maxMinutes)
     {
-        uint32 minMinutes = std::max<uint32>(1, _initialMinMinutes);
-        uint32 maxMinutes = std::max<uint32>(1, _initialMaxMinutes);
+        minMinutes = std::max<uint32>(1, minMinutes);
+        maxMinutes = std::max<uint32>(1, maxMinutes);
 
         if (maxMinutes < minMinutes)
             std::swap(maxMinutes, minMinutes);
@@ -320,11 +354,14 @@ private:
         return MinutesToMs(urand(minMinutes, maxMinutes));
     }
 
+    uint32 RollInitialDelayMs() const
+    {
+        return RollDelayMs(_initialMinMinutes, _initialMaxMinutes);
+    }
+
     uint32 RollMainDelayMs() const
     {
-        uint32 minMinutes = _baseMinutes > _varianceMinutes ? _baseMinutes - _varianceMinutes : 1;
-        uint32 maxMinutes = std::max<uint32>(minMinutes, _baseMinutes + _varianceMinutes);
-        return MinutesToMs(urand(minMinutes, maxMinutes));
+        return RollDelayMs(_minMinutes, _maxMinutes);
     }
 
     void SendWarning(WorldBuffEvent const& event) const
@@ -473,8 +510,8 @@ private:
     bool _debug = false;
     bool _restrictBuffToFaction = true;
     bool _warchiefCrossroads = true;
-    uint32 _baseMinutes = 90;
-    uint32 _varianceMinutes = 60;
+    uint32 _minMinutes = 30;
+    uint32 _maxMinutes = 150;
     uint32 _initialMinMinutes = 30;
     uint32 _initialMaxMinutes = 150;
     uint32 _warningLeadMs = 10 * MS_PER_MINUTE;
