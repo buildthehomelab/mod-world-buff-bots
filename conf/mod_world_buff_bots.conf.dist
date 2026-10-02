@@ -107,6 +107,7 @@ WorldBuffBots.TimeFormat = %H:%M
 #
 WorldBuffBots.Warchief.Enable = 1
 WorldBuffBots.Warchief.IncludeCrossroads = 1
+WorldBuffBots.Warchief.OffsetMinutes = 0
 WorldBuffBots.Warchief.Warning = {player} is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing drops at {time} realm time!
 WorldBuffBots.Warchief.Announcement = Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of {player}.
 
@@ -117,6 +118,7 @@ WorldBuffBots.Warchief.Announcement = Rend Blackhand has fallen! Thrall has gran
 #   Applies spell 22888 to eligible players in Stormwind.
 #
 WorldBuffBots.Dragonslayer.Enable = 1
+WorldBuffBots.Dragonslayer.OffsetMinutes = 0
 WorldBuffBots.Dragonslayer.Warning = {player} is carrying the head of Onyxia to Stormwind. Rallying Cry of the Dragonslayer drops at {time} realm time!
 WorldBuffBots.Dragonslayer.Announcement = {player} has returned the head of Onyxia! Rallying Cry of the Dragonslayer echoes through Stormwind.
 
