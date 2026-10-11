@@ -78,6 +78,16 @@ WorldBuffBots.RestrictBuffToFaction = 1
 #
 
 #
+# WorldBuffBots.<Buff>.DurationMinutes
+#   How long the buff lasts, in minutes. 0 keeps the game's own duration, which
+#   is 60 minutes for Warchief's Blessing and 120 for the other two.
+#   Warchief's Blessing defaults to 120 so all three buffs last the same time.
+#   This changes the spell itself, so a real quest turn-in gives the same
+#   duration. Buffs already on a character keep the time they had.
+#   Needs a worldserver restart; a config reload does not apply it.
+#
+
+#
 # WorldBuffBots.TimeFormat
 #   strftime format used for {time} in warnings. Realm time is the worldserver's
 #   local time, which is what the in-game clock shows players.
@@ -108,6 +118,7 @@ WorldBuffBots.TimeFormat = %H:%M
 WorldBuffBots.Warchief.Enable = 1
 WorldBuffBots.Warchief.IncludeCrossroads = 1
 WorldBuffBots.Warchief.OffsetMinutes = 0
+WorldBuffBots.Warchief.DurationMinutes = 120
 WorldBuffBots.Warchief.Warning = {player} is carrying Rend Blackhand's head to Orgrimmar. Warchief's Blessing drops at {time} realm time!
 WorldBuffBots.Warchief.Announcement = Rend Blackhand has fallen! Thrall has granted Warchief's Blessing in honor of {player}.
 
@@ -119,6 +130,7 @@ WorldBuffBots.Warchief.Announcement = Rend Blackhand has fallen! Thrall has gran
 #
 WorldBuffBots.Dragonslayer.Enable = 1
 WorldBuffBots.Dragonslayer.OffsetMinutes = 0
+WorldBuffBots.Dragonslayer.DurationMinutes = 0
 WorldBuffBots.Dragonslayer.Warning = {player} is carrying the head of Onyxia to Stormwind. Rallying Cry of the Dragonslayer drops at {time} realm time!
 WorldBuffBots.Dragonslayer.Announcement = {player} has returned the head of Onyxia! Rallying Cry of the Dragonslayer echoes through Stormwind.
 
@@ -133,5 +145,6 @@ WorldBuffBots.Dragonslayer.Announcement = {player} has returned the head of Onyx
 #
 WorldBuffBots.Zandalar.Enable = 1
 WorldBuffBots.Zandalar.OffsetMinutes = 10
+WorldBuffBots.Zandalar.DurationMinutes = 0
 WorldBuffBots.Zandalar.Warning = {player} is carrying the Heart of Hakkar to Yojamba Isle. Spirit of Zandalar drops at {time} realm time!
 WorldBuffBots.Zandalar.Announcement = {player} has returned the Heart of Hakkar! Spirit of Zandalar fills Stranglethorn Vale.

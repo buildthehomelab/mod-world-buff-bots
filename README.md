@@ -57,6 +57,12 @@ By default the buff itself is also restricted to that faction, so an Alliance pl
 
 Warchief's Blessing also applies to the Crossroads 10 seconds later by default, matching AzerothCore's existing Thrall reward behavior. You can disable that in the config.
 
+### Buff duration
+
+In the game data Warchief's Blessing lasts 60 minutes, while Rallying Cry of the Dragonslayer and Spirit of Zandalar last 120. Because all three go out on the same cycle, the module raises Warchief's Blessing to 120 minutes by default. `WorldBuffBots.<Buff>.DurationMinutes` sets it per buff, and `0` keeps the game's own duration.
+
+The setting changes the spell itself, so a real Rend Blackhand turn-in at Thrall gives the same duration as the simulated one. It is read once at startup, so a new value needs a worldserver restart, and buffs already on a character keep the time they had.
+
 ## Configuration
 
 Key settings in `mod_world_buff_bots.conf`:
@@ -69,6 +75,7 @@ Key settings in `mod_world_buff_bots.conf`:
 | `WorldBuffBots.InitialMinMinutes` / `.InitialMaxMinutes` | `30` / `150` | Random range for the first cycle after startup. |
 | `WorldBuffBots.Zandalar.OffsetMinutes` | `10` | How long after the city buffs ZG fires. |
 | `WorldBuffBots.<Buff>.OffsetMinutes` | `0` | Per-buff offset within the cycle. |
+| `WorldBuffBots.<Buff>.DurationMinutes` | `120` for Warchief, else `0` | How long the buff lasts. `0` keeps the game's own duration. Needs a restart. |
 | `WorldBuffBots.TimeFormat` | `%H:%M` | `strftime` format for `{time}`. Use `%I:%M %p` for a 12 hour clock. |
 | `WorldBuffBots.<Buff>.Warning` | per buff | Warning text. Leave empty to suppress that buff's warning. |
 | `WorldBuffBots.<Buff>.Announcement` | per buff | Turn-in text. |

@@ -10,18 +10,21 @@
 
 #include "AreaDefines.h"
 #include "Config.h"
+#include "DBCStructure.h"
 #include "GameTime.h"
 #include "Log.h"
 #include "Player.h"
 #include "Random.h"
 #include "ScriptMgr.h"
 #include "SharedDefines.h"
+#include "SpellInfo.h"
 #include "Timer.h"
 #include "World.h"
 #include "WorldSessionMgr.h"
 
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -52,6 +55,21 @@ constexpr std::array<char const*, 24> HORDE_ANNOUNCER_NAMES = {{
     "Krazka", "Lokgar", "Malkor", "Mogra", "Narvok", "Rethka",
     "Rogash", "Shagra", "Surnak", "Thokran", "Torgha", "Urgash",
     "Varkesh", "Varzok", "Zagrim", "Zoraka", "Drezka", "Kazra"
+}};
+
+// Warchief's Blessing lasts one hour in the game data while the other two last
+// two. All three go out on the same cycle here, so it is raised to match.
+struct BuffDuration
+{
+    char const* Key;
+    uint32 SpellId;
+    uint32 DefaultMinutes;
+};
+
+constexpr std::array<BuffDuration, 3> BUFF_DURATIONS = {{
+    { "Warchief", SPELL_WARCHIEFS_BLESSING, 120 },
+    { "Dragonslayer", SPELL_RALLYING_CRY_OF_THE_DRAGONSLAYER, 0 },
+    { "Zandalar", SPELL_SPIRIT_OF_ZANDALAR, 0 }
 }};
 
 struct DelayedCast
@@ -518,7 +536,54 @@ private:
     std::string _timeFormat = "%H:%M";
 };
 
+// Changes how long the buff spells themselves last, so a real quest turn-in
+// gives the same duration as the simulated one. Spell data is built once at
+// startup, which is why a new DurationMinutes needs a worldserver restart.
+class WorldBuffBotsGlobalScript : public GlobalScript
+{
+public:
+    WorldBuffBotsGlobalScript() : GlobalScript("WorldBuffBotsGlobalScript", {
+        GLOBALHOOK_ON_LOAD_SPELL_CUSTOM_ATTR
+    })
+    {
+    }
+
+    void OnLoadSpellCustomAttr(SpellInfo* spellInfo) override
+    {
+        for (std::size_t i = 0; i < BUFF_DURATIONS.size(); ++i)
+        {
+            BuffDuration const& buff = BUFF_DURATIONS[i];
+            if (spellInfo->Id != buff.SpellId)
+                continue;
+
+            if (!sConfigMgr->GetOption<bool>("WorldBuffBots.Enable", true))
+                return;
+
+            std::string option = "WorldBuffBots.";
+            option += buff.Key;
+            option += ".DurationMinutes";
+
+            uint32 minutes = sConfigMgr->GetOption<uint32>(option, buff.DefaultMinutes);
+            if (!minutes)
+                return;
+
+            constexpr uint32 maxMinutes = std::numeric_limits<int32>::max() / MS_PER_MINUTE;
+            int32 durationMs = static_cast<int32>(std::min(minutes, maxMinutes) * MS_PER_MINUTE);
+
+            // No SpellDuration.dbc row is needed: the core only reads the base
+            // and maximum duration from the entry.
+            _durations[i] = { 0, { durationMs, 0, durationMs } };
+            spellInfo->DurationEntry = &_durations[i];
+            return;
+        }
+    }
+
+private:
+    std::array<SpellDurationEntry, BUFF_DURATIONS.size()> _durations{};
+};
+
 void AddWorldBuffBotsScripts()
 {
     new WorldBuffBotsWorldScript();
+    new WorldBuffBotsGlobalScript();
 }
