@@ -106,8 +106,6 @@ If a rerolled timer happens to land shorter than `WarningMinutes`, the warning s
 
 `WorldBuffBots.BaseMinutes` and `WorldBuffBots.VarianceMinutes` are replaced by `MinMinutes` and `MaxMinutes`. If the old pair is still in your config and the new one is not, it is read as `Base - Variance` to `Base + Variance` so your realm keeps its existing timing, and a warning is logged asking you to switch. The old default of `90 +/- 60` is exactly the new default of `30` to `150`.
 
-From the Playerbots-based version: `WorldBuffBots.BotFallbackLevel` and `WorldBuffBots.FallbackAnnouncerName` are no longer used. Remove them from an existing `mod_world_buff_bots.conf`; the generated name pools work even when no players or bots are online.
-
 For quick testing, set:
 
 ```ini
